@@ -1,12 +1,14 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
-const fs = require('fs');
 const express = require('express');
+const fs = require('fs');
 
+// --- إعدادات السيادة ---
 const bot = new Telegraf('8138541463:AAFL1LiWzzMZo8SCNubLSvCRrKqTqcEpcJo');
 const ADMIN_ID = 5791865678;
 const CHANNEL_ID = '@wizzy_dv_sd';
 const USERS_FILE = './users.json';
+const API_URL = 'https://api.consumet.org/anime/gogoanime'; // الـ API الجاهز
 
 // --- إدارة البيانات ---
 if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, JSON.stringify([]));
@@ -19,120 +21,122 @@ function saveUser(id, name) {
     }
 }
 
-// سيرفر ويب
+// سيرفر ويب للبقاء حياً في Render
 const app = express();
-app.get('/', (req, res) => res.send('🔱 Wizzy System is Running!'));
+app.get('/', (req, res) => res.send('🔱 Wizzy Ultimate Sniper is LIVE!'));
 app.listen(process.env.PORT || 3000);
 
-// فحص الاشتراك
+// --- فحص الاشتراك الإجباري ---
 async function checkSub(ctx, next) {
     if (ctx.from.id === ADMIN_ID) return next();
     try {
         const member = await ctx.telegram.getChatMember(CHANNEL_ID, ctx.from.id);
-        if (['member', 'administrator', 'creator'].includes(member.status)) return next();
-        await ctx.replyWithMarkdown(`⚠️ **عذراً يا ملك، يجب الانضمام للقناة أولاً!**`,
-            Markup.inlineKeyboard([[Markup.button.url('انضم للقناة الآن 👑', `https://t.me/wizzy_dv_sd`)]])
+        const allowed = ['member', 'administrator', 'creator'];
+        if (allowed.includes(member.status)) return next();
+        
+        await ctx.replyWithMarkdown(`⚠️ **يا ملك، يجب الانضمام للقناة أولاً لاستخدام البوت!**`,
+            Markup.inlineKeyboard([[Markup.button.url('انضم للقناة الآن 👑', `https://t.me/${CHANNEL_ID.replace('@','')}`)]])
         );
     } catch (e) { return next(); }
 }
 
-// --- 🏠 البداية (استخدام الأزرار الثابتة) ---
+// --- 🏠 القائمة الرئيسية (نظام التحفة) ---
+const mainMenu = Markup.keyboard([
+    ['🔍 بحث عن أنمي', '📢 قناة السيادة'],
+    ['🛠️ لوحة التحكم', '❓ مساعدة']
+]).resize();
+
 bot.start(checkSub, async (ctx) => {
     saveUser(ctx.from.id, ctx.from.first_name);
     try { await ctx.react('👑'); } catch (e) {}
-    
-    // أزرار القائمة الثابتة (Reply Keyboard)
-    ctx.replyWithMarkdown(`أهلاً بك في **إمبراطورية الأنمي** 👑🏮\n\nاستخدم الأزرار بالأسفل للتنقل، أو أرسل اسم الأنمي مباشرة للبحث.`,
-        Markup.keyboard([
-            ['🔍 بحث عن أنمي', '📰 أخبار الأنمي'],
-            ['🛠️ لوحة التحكم', '🔱 قناة السيادة']
-        ]).resize().persistent() // تجعل القائمة تظهر دائماً وبحجم مناسب
-    );
+    ctx.replyWithMarkdown(`أهلاً بك في **إمبراطورية القنص الأسطورية** 👑🎯\n\nأرسل اسم الأنمي بالإنجليزية وسأجلب لك روابط المشاهدة بالجودات الأربعة فوراً.`, mainMenu);
 });
 
-// --- معالجة الضغط على الأزرار الثابتة ---
-bot.hears('🔍 بحث عن أنمي', (ctx) => ctx.reply('أرسل لي اسم الأنمي بالإنجليزي الآن يا ملك.. 🔍'));
-bot.hears('📰 أخبار الأنمي', async (ctx) => {
-    const res = await axios.get('https://api.jikan.moe/v4/seasons/now?limit=5');
-    const news = res.data.data.map(a => `🔥 *${a.title}*`).join('\n\n');
-    ctx.replyWithMarkdown(`📰 **أخبار الموسم المتصدرة:**\n\n${news}`);
-});
-bot.hears('🔱 قناة السيادة', (ctx) => ctx.reply('تفضل رابط القناة يا إمبراطور: https://t.me/wizzy_dv_sd'));
-bot.hears('🛠️ لوحة التحكم', (ctx) => {
-    if (ctx.from.id !== ADMIN_ID) return ctx.reply('هذه المنطقة للسيادة فقط! ❌');
-    const users = getUsers();
-    ctx.replyWithMarkdown(`📊 **إحصائيات الإمبراطورية:**\n\n👥 عدد الرعايا: \`${users.length}\`\n📡 الحالة: \`مستقر\``);
-});
+bot.hears('🔍 بحث عن أنمي', (ctx) => ctx.reply('أرسل اسم الأنمي الآن يا ملك (مثال: Naruto).. 🔍'));
+bot.hears('📢 قناة السيادة', (ctx) => ctx.reply('قناة المطور ويزي: https://t.me/wizzy_dv_sd'));
 
-// --- البحث (عند إرسال نص) ---
+// --- 🔍 محرك البحث الذكي (Consumet) ---
 bot.on('text', checkSub, async (ctx) => {
     const query = ctx.message.text;
-    if (['🔍 بحث عن أنمي', '📰 أخبار الأنمي', '🛠️ لوحة التحكم', '🔱 قناة السيادة'].includes(query)) return;
+    if (['🔍 بحث عن أنمي', '📢 قناة السيادة', '🛠️ لوحة التحكم', '❓ مساعدة'].includes(query)) return;
 
     try { await ctx.react('🔍'); } catch (e) {}
-    const load = await ctx.reply('🔍 جاري استخراج البيانات...');
+    const load = await ctx.reply('⏳ جاري اختراق السيرفرات وجلب المحتوى...');
 
     try {
-        const res = await axios.get(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`);
-        const anime = res.data.data[0];
+        const res = await axios.get(`${API_URL}/${encodeURIComponent(query)}`);
+        const results = res.data.results;
 
-        if (anime) {
-            try { await ctx.react('🔥'); } catch (e) {}
-            // نستخدم الأزرار الطائرة (Inline) فقط للبيانات المتغيرة كالحلقات والمانجا
-            const buttons = [
-                [Markup.button.callback('🎬 قائمة الحلقات', `e_${anime.mal_id}_1`)],
-                [Markup.button.callback('📖 معلومات المانجا', `m_${anime.mal_id}`)],
-                [Markup.button.url('🚀 مشاهدة سريعة', `https://witanime.pics/?s=${encodeURIComponent(anime.title)}`)]
-            ];
-
-            await ctx.sendPhoto(anime.images.jpg.large_image_url, {
-                caption: `🏯 *${anime.title}*\n\n⭐ *التقييم:* ${anime.score || '7.5'}\n📝 *القصة:* ${anime.synopsis?.substring(0, 300)}...`,
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard(buttons)
+        if (results && results.length > 0) {
+            const anime = results[0];
+            await ctx.sendPhoto(anime.image, {
+                caption: `✅ **تم العثور على الهدف:**\n\n📌 *${anime.title}*\n\nاضغط أدناه لعرض قائمة الحلقات:`,
+                ...Markup.inlineKeyboard([[Markup.button.callback('🎬 عرض الحلقات', `list_${anime.id}`)]])
             });
-        } else { ctx.reply('لم أجد نتائج! حاول كتابة الاسم بدقة.'); }
-    } catch (e) { ctx.reply('السيرفر مشغول، حاول لاحقاً.'); }
+        } else { ctx.reply('❌ لم أجد نتائج! حاول كتابة الاسم بدقة.'); }
+    } catch (e) { ctx.reply('⚠️ السيرفر العالمي مشغول حالياً، حاول مرة أخرى.'); }
     finally { ctx.deleteMessage(load.message_id).catch(() => {}); }
 });
 
-// --- معالجة الحلقات (Inline) ---
-bot.action(/e_(\d+)_(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const [_, id, page] = ctx.match;
+// --- 🎞️ جلب قائمة الحلقات (التفاعل السريع) ---
+bot.action(/list_(.+)/, async (ctx) => {
+    const animeId = ctx.match[1];
     try {
-        const res = await axios.get(`https://api.jikan.moe/v4/anime/${id}/episodes?page=${page}`);
-        const eps = res.data.data;
-        if (!eps || eps.length === 0) return ctx.reply('⚠️ لا توجد حلقات متاحة حالياً.');
+        await ctx.answerCbQuery('جاري تجهيز الحلقات... 🎞️');
+        const res = await axios.get(`${API_URL}/info/${animeId}`);
+        const episodes = res.data.episodes;
 
-        let buttons = eps.map(ep => [Markup.button.url(`حلقة ${ep.mal_id}: ${ep.title.substring(0,20)}`, `https://witanime.pics/` )]);
-        let nav = [];
-        if (parseInt(page) > 1) nav.push(Markup.button.callback('⬅️', `e_${id}_${parseInt(page)-1}`));
-        if (res.data.pagination.has_next_page) nav.push(Markup.button.callback('➡️', `e_${id}_${parseInt(page)+1}`));
-        if (nav.length > 0) buttons.push(nav);
+        if (!episodes || episodes.length === 0) return ctx.reply('⚠️ لا تتوفر حلقات حالياً لهذا العمل.');
 
-        await ctx.editMessageText(`🎞️ **قائمة الحلقات - ص ${page}:**`, Markup.inlineKeyboard(buttons));
-    } catch (e) { ctx.reply('فشل جلب الحلقات.'); }
+        // عرض أول 24 حلقة لتجنب تعليق الأزرار
+        let buttons = episodes.slice(0, 24).map(ep => [
+            Markup.button.callback(`الحلقة ${ep.number}`, `watch_${ep.id}`)
+        ]);
+
+        ctx.reply(`🎞️ **قائمة الحلقات لـ ${animeId}:**`, Markup.inlineKeyboard(buttons));
+    } catch (e) { ctx.reply('❌ فشل جلب الحلقات.'); }
 });
 
-// --- معالجة المانجا (Inline) ---
-bot.action(/m_(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const id = ctx.match[1];
+// --- 🚀 السطو على روابط الجودات (التحفة الحقيقية) ---
+bot.action(/watch_(.+)/, async (ctx) => {
+    const episodeId = ctx.match[1];
     try {
-        const anime = await axios.get(`https://api.jikan.moe/v4/anime/${id}`);
-        const res = await axios.get(`https://api.jikan.moe/v4/manga?q=${encodeURIComponent(anime.data.data.title)}&limit=1`);
-        const manga = res.data.data[0];
+        await ctx.answerCbQuery('جاري استخراج الجودات... 📺');
+        const res = await axios.get(`${API_URL}/watch/${episodeId}`);
+        const sources = res.data.sources; // الروابط المباشرة
 
-        if (manga) {
-            ctx.replyWithPhoto(manga.images.jpg.large_image_url, {
-                caption: `📖 **مانجا: ${manga.title}**\n\n⭐ التقييم: ${manga.score}\n📚 الفصول: ${manga.chapters || 'مستمرة'}\n\n📝 الوصف: ${manga.synopsis?.substring(0, 200)}...`,
-                ...Markup.inlineKeyboard([[Markup.button.url('🚀 قراءة الفصول', `https://gmanga.me/mangas?search=${encodeURIComponent(manga.title)}`)]])
-            });
-        }
-    } catch (e) { ctx.reply('خطأ في المانجا.'); }
+        let buttons = sources.map(src => [
+            Markup.button.url(`🔗 جودة ${src.quality} (مشاهدة/تحميل)`, src.url)
+        ]);
+        
+        buttons.push([Markup.button.callback('🔙 العودة للقائمة', 'start')]);
+
+        ctx.replyWithMarkdown(`🎬 **أنت تشاهد الحلقة الآن:**\n\nاختر الجودة المفضلة لفتح المشاهد المباشر:`, 
+            Markup.inlineKeyboard(buttons));
+    } catch (e) { ctx.reply('❌ فشل جلب روابط الفيديو.'); }
 });
 
+// --- 🛠️ لوحة تحكم الأدمن ---
+bot.hears('🛠️ لوحة التحكم', (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return ctx.reply('للسيادة فقط! ❌');
+    const users = getUsers();
+    ctx.replyWithMarkdown(`📊 **إحصائيات الإمبراطورية:**\n\n👥 عدد المستخدمين: \`${users.length}\`\n📡 السيرفر: \`Online\``,
+        Markup.inlineKeyboard([[Markup.button.callback('📢 إرسال إذاعة', 'admin_brd')]])
+    );
+});
+
+bot.action('admin_brd', (ctx) => ctx.reply('أرسل الإذاعة هكذا: `/broadcast نص الرسالة`'));
+
+bot.command('broadcast', async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    const msg = ctx.message.text.replace('/broadcast ', '');
+    const users = getUsers();
+    users.forEach(u => bot.telegram.sendMessage(u.id, `📢 **رسالة ملكية:**\n\n${msg}`).catch(()=>null));
+    ctx.reply('✅ تم الإرسال للجميع.');
+});
+
+// --- 🚀 تشغيل القلعة ---
 bot.telegram.deleteWebhook().then(() => {
     bot.launch();
-    console.log("✅ القلعة متصلة بنظام الأزرار المزدوج!");
+    console.log("✅ بوت القناص يعمل الآن.. جميع الأزرار مصلحة!");
 });
