@@ -1,11 +1,9 @@
 {
-  "name": "wizzy-sovereign-ultra-bot",
-  "version": "1.2.0",
-  "description": "The ultimate Anime bot for Wizzy",
+  "name": "wizzy-ultra-sovereign",
+  "version": "2.0.0",
+  "description": "The Masterpiece Anime Bot for Wizzy",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
+  "scripts": { "start": "node index.js" },
   "dependencies": {
     "telegraf": "^4.12.2",
     "axios": "^1.4.0",
