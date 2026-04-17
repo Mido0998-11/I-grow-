@@ -4,155 +4,160 @@ const fs = require('fs');
 const cron = require('node-cron');
 const express = require('express');
 
+// --- بيانات السيادة ---
 const bot = new Telegraf('8138541463:AAFL1LiWzzMZo8SCNubLSvCRrKqTqcEpcJo');
 const ADMIN_ID = 5791865678;
 const CHANNEL_ID = '@wizzy_dv_sd';
-const DB_FILE = './imperial_db.json';
+const DB_FILE = './imperial_data.json';
 
-// --- إدارة البيانات الضخمة ---
+// --- إدارة البيانات ---
 if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({}));
 const getData = () => JSON.parse(fs.readFileSync(DB_FILE));
 const saveData = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-function getUser(ctx) {
+function initUser(ctx) {
     let db = getData();
     const id = ctx.from.id;
     if (!db[id]) {
         db[id] = { 
             name: ctx.from.first_name, 
-            coins: 50, 
+            coins: 100, 
             xp: 0, 
+            level: 1,
             reminders: true, 
-            rank: 'رعية 🧑‍🌾',
-            favs: [] 
+            joined: new Date().toLocaleDateString() 
         };
+        saveData(db);
     }
-    saveData(db);
     return db[id];
 }
 
 // سيرفر Render
 const app = express();
-app.get('/', (req, res) => res.send('🔱 Wizzy Imperial Core is ONLINE!'));
+app.get('/', (req, res) => res.send('🔱 Wizzy Imperial Core is Online!'));
 app.listen(process.env.PORT || 3000);
 
-// --- الأزرار الرئيسية (التحفة) ---
+// --- تعاريف الأزرار (ثابتة لمنع الأخطاء) ---
+const btnSearch = '🔍 قنص أنمي';
+const btnToday = '📅 أنميات اليوم';
+const btnTop = '🔥 الأنميات المتصدرة';
+const btnProfile = '👤 ملفي الملكي';
+const btnHelp = '❓ مساعدة';
+const btnChannel = '🔱 قناة السيادة';
+const btnAdmin = '🛠️ لوحة الإمبراطور';
+
 const mainMenu = Markup.keyboard([
-    ['🔍 قنص أنمي', '📅 أنميات الليلة'],
-    ['🔥 توب الأسبوع', '🎖️ متجر الرتب'],
-    ['📊 ملفي الملكي', '💡 نصيحة اليوم'],
-    ['❓ مساعدة', '🔱 قناة السيادة']
+    [btnSearch, btnToday],
+    [btnTop, btnProfile],
+    [btnHelp, btnChannel],
+    [btnAdmin]
 ]).resize();
 
-// --- ⏰ نظام التذكير الإمبراطوري التلقائي ---
-// يرسل تذكير كل يوم الساعة 7 مساءً
-cron.schedule('0 19 * * *', () => {
+// --- ⏰ نظام التذكير التلقائي (الساعة 6 مساءً) ---
+cron.schedule('0 18 * * *', () => {
     const db = getData();
     Object.keys(db).forEach(id => {
         if (db[id].reminders) {
-            bot.telegram.sendMessage(id, `👑 **تنبيه ملكي مسائي:**\n\nيا ملك، حان وقت الاستراحة ومتابعة حلقاتك الجديدة! لا تنسَ ذكر الله. 🔥`).catch(() => {});
+            bot.telegram.sendMessage(id, `👑 **تذكير ملكي:**\n\nيا ملك، حان وقت متابعة أنمياتك المفضلة! لا تنسَ صلاتك ودراستك. 🔥`).catch(() => {});
         }
     });
 });
 
-// --- 🏠 البداية ---
+// --- 🏠 الأوامر الأساسية ---
 bot.start(async (ctx) => {
-    getUser(ctx);
+    initUser(ctx);
     try { await ctx.react('👑'); } catch (e) {}
-    ctx.replyWithMarkdown(`أهلاً بك في **الإصدار السيادي الأقصى** 🏯✨\n\nيا ${ctx.from.first_name}، كل الأنظمة مفعلة وجاهزة لخدمتك.`, mainMenu);
+    ctx.replyWithMarkdown(`أهلاً بك في **الإصدار المعجز لويزي** 🏯✨\n\nجميع الأزرار والأنظمة مفعلة الآن بنسبة 100%. جرب الميزات الجديدة!`, mainMenu);
 });
 
-// --- 🔍 محرك القنص المطور (معلومات كاملة) ---
-bot.hears('🔍 قنص أنمي', (ctx) => ctx.reply('أرسل اسم الأنمي بالإنجليزية يا إمبراطور.. 🔍'));
+// --- ❓ إصلاح زر المساعدة ---
+bot.hears(btnHelp, async (ctx) => {
+    try { await ctx.react('💡'); } catch (e) {}
+    ctx.replyWithMarkdown(`❓ **دليل السيادة لويزي:**\n\n1. أرسل اسم الأنمي (بالإنجليزية) للبحث الفوري.\n2. اجمع الـ XP والعملات لرفع مستواك الإمبراطوري.\n3. التذكيرات تصلك يومياً الساعة 6 مساءً تلقائياً.\n\n📞 للدعم الفني: @Wizzy_Dev`, 
+    Markup.inlineKeyboard([[Markup.button.url('تواصل مع المطور 👨‍💻', 'https://t.me/Wizzy_Dev')]]));
+});
+
+// --- 🔱 إصلاح زر قناة السيادة ---
+bot.hears(btnChannel, async (ctx) => {
+    try { await ctx.react('📡'); } catch (e) {}
+    ctx.replyWithMarkdown(`🔱 **قناة السيادة والمصدر:**\n\nانضم لمتابعة تحديثات الإمبراطور ويزي وأحدث مشاريع البرمجة.`,
+    Markup.inlineKeyboard([[Markup.button.url('دخول القناة الملكية 👑', 'https://t.me/wizzy_dv_sd')]]));
+});
+
+// --- 👤 ملفي الملكي ---
+bot.hears(btnProfile, async (ctx) => {
+    const u = initUser(ctx);
+    try { await ctx.react('📊'); } catch (e) {}
+    ctx.replyWithMarkdown(`👤 **البطاقة الشخصية لـ ${ctx.from.first_name}:**\n\n🆙 المستوى: \`${u.level}\`\n✨ الخبرة: \`${u.xp}\`\n🪙 العملات: \`${u.coins}\`\n📅 انضممت في: \`${u.joined}\`\n🔔 التذكير: \`${u.reminders ? 'مفعل ✅' : 'معطل ❌'}\``);
+});
+
+// --- 📅 أنميات اليوم ---
+bot.hears(btnToday, async (ctx) => {
+    try { await ctx.react('⏰'); } catch (e) {}
+    const load = await ctx.reply('⏳ جاري جلب جدول اليوم...');
+    try {
+        const res = await axios.get(`https://api.jikan.moe/v4/schedules?limit=8`);
+        let text = `📅 **أنميات تعرض اليوم:**\n\n`;
+        res.data.data.forEach(a => text += `🔹 *${a.title}* (🕒 ${a.broadcast.time || 'N/A'})\n`);
+        ctx.replyWithMarkdown(text);
+    } catch (e) { ctx.reply('السيرفر مشغول.'); }
+    finally { ctx.deleteMessage(load.message_id).catch(() => {}); }
+});
+
+// --- 🔥 الأنميات المتصدرة ---
+bot.hears(btnTop, async (ctx) => {
+    try { await ctx.react('🔥'); } catch (e) {}
+    const res = await axios.get('https://api.jikan.moe/v4/top/anime?limit=5');
+    let text = `🏆 **أفضل 5 أنميات هذا الأسبوع:**\n\n`;
+    res.data.data.forEach((a, i) => text += `${i+1}. *${a.title}* (⭐ ${a.score})\n`);
+    ctx.replyWithMarkdown(text);
+});
+
+// --- 🔍 محرك البحث (القناص) ---
+bot.hears(btnSearch, (ctx) => ctx.reply('أرسل اسم الأنمي بالإنجليزية الآن.. 🔍'));
 
 bot.on('text', async (ctx) => {
     const query = ctx.message.text;
-    const reserved = ['🔍 قنص أنمي', '📅 أنميات الليلة', '🔥 توب الأسبوع', '🎖️ متجر الرتب', '📊 ملفي الملكي', '💡 نصيحة اليوم', '❓ مساعدة', '🔱 قناة السيادة'];
-    if (reserved.includes(query)) return;
+    const allBtns = [btnSearch, btnToday, btnTop, btnProfile, btnHelp, btnChannel, btnAdmin];
+    if (allBtns.includes(query)) return;
 
     let db = getData();
-    db[ctx.from.id].coins += 10; // مكافأة البحث
-    db[ctx.from.id].xp += 20;
-    saveData(db);
+    const id = ctx.from.id;
+    if (db[id]) { db[id].xp += 20; db[id].coins += 10; saveData(db); }
 
     try { await ctx.react('🔍'); } catch (e) {}
-    const load = await ctx.reply('⏳ جاري استخراج البيانات من الأرشيف العالمي...');
+    const load = await ctx.reply('🚀 جاري استخراج المعلومات...');
 
     try {
         const res = await axios.get(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`);
         const a = res.data.data[0];
 
         if (a) {
-            try { await ctx.react('🔥'); } catch (e) {}
-            const genres = a.genres.map(g => g.name).join(', ');
-            const studio = a.studios[0]?.name || 'غير معروف';
+            try { await ctx.react('✅'); } catch (e) {}
+            const caption = `🏯 **الأنمي:** \`${a.title}\`\n\n⭐ التقييم: \`${a.score || '7.5'}\`\n🎞️ الحلقات: \`${a.episodes || 'مستمر'}\`\n📌 الحالة: \`${a.status}\`\n🎬 الاستوديو: \`${a.studios[0]?.name || 'N/A'}\`\n\n✅ اختر وجهتك للمشاهدة:`;
             
-            const caption = `🏯 **الأنمي:** \`${a.title}\`\n\n` +
-                `⭐ **التقييم:** \`${a.score || '7.0'}\`\n` +
-                `📌 **الحالة:** \`${a.status}\`\n` +
-                `🎥 **الاستوديو:** \`${studio}\`\n` +
-                `🎭 **التصنيف:** \`${genres}\`\n` +
-                `⏳ **المدة:** \`${a.duration}\`\n\n` +
-                `💰 ربحت: \`+10 عملات\`\n\n✅ اختر وجهتك للمشاهدة:`;
-
+            const q = encodeURIComponent(a.title);
             const buttons = Markup.inlineKeyboard([
-                [Markup.button.url('🎬 WitAnime', `https://witanime.pics/?s=${encodeURIComponent(a.title)}`)],
-                [Markup.button.url('📽️ AnimeLek', `https://animelek.me/search?q=${encodeURIComponent(a.title)}`)],
-                [Markup.button.url('🚀 بحث تليجرام', `tg://search?text=${encodeURIComponent(a.title)}`)]
+                [Markup.button.url('🎬 سيرفر WitAnime', `https://witanime.pics/?s=${q}`)],
+                [Markup.button.url('📽️ سيرفر AnimeLek', `https://animelek.me/search?q=${q}`)],
+                [Markup.button.url('🚀 بحث تليجرام المباشر', `tg://search?text=${q}+مترجم`)]
             ]);
-
             await ctx.sendPhoto(a.images.jpg.large_image_url, { caption, ...buttons });
-        } else { ctx.reply('❌ لم يتم العثور على نتائج.'); }
-    } catch (e) { ctx.reply('⚠️ عذراً، السيرفر العالمي مضغوط.'); }
+        } else { ctx.reply('لم أجد نتائج.'); }
+    } catch (e) { ctx.reply('حدث خطأ في البحث.'); }
     finally { ctx.deleteMessage(load.message_id).catch(() => {}); }
 });
 
-// --- 📊 ملفي الملكي ---
-bot.hears('📊 ملفي الملكي', (ctx) => {
-    const u = getUser(ctx);
-    ctx.replyWithMarkdown(`📊 **السجل الإمبراطوري لـ ${ctx.from.first_name}**\n\n📜 الرتبة: \`${u.rank}\`\n💰 العملات: \`${u.coins}\`\n✨ الخبرة (XP): \`${u.xp}\`\n🔔 التذكيرات: \`${u.reminders ? 'مفعلة ✅' : 'معطلة ❌'}\``,
-        Markup.inlineKeyboard([[Markup.button.callback('🔔 تبديل حالة التذكير', 'toggle_rem')]])
-    );
+// --- 🛠️ لوحة التحكم ---
+bot.hears(btnAdmin, (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return ctx.reply('❌ للسيادة فقط!');
+    ctx.replyWithMarkdown(`🔱 **غرفة القيادة:**`, Markup.inlineKeyboard([[Markup.button.callback('📊 الإحصائيات', 'stats')]]));
 });
 
-bot.action('toggle_rem', (ctx) => {
-    let db = getData();
-    db[ctx.from.id].reminders = !db[ctx.from.id].reminders;
-    saveData(db);
-    ctx.answerCbQuery(`تم ${db[ctx.from.id].reminders ? 'تفعيل' : 'تعطيل'} التذكيرات`);
-    ctx.reply(`🔔 حالة التذكير الجديدة: ${db[ctx.from.id].reminders ? 'مفعلة ✅' : 'معطلة ❌'}`);
-});
-
-// --- 📅 أنميات الليلة (الجدول) ---
-bot.hears('📅 أنميات الليلة', async (ctx) => {
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const today = days[new Date().getDay()];
-    const res = await axios.get(`https://api.jikan.moe/v4/schedules?filter=${today}&limit=8`);
-    let text = `📅 **جدول عرض الليلة (${today}):**\n\n`;
-    res.data.data.forEach(a => text += `🔹 *${a.title}* (🕒 ${a.broadcast.time || 'N/A'})\n`);
-    ctx.replyWithMarkdown(text);
-});
-
-// --- 🎖️ متجر الرتب ---
-bot.hears('🎖️ متجر الرتب', (ctx) => {
-    ctx.replyWithMarkdown(`🎖️ **مرحباً بك في سوق السيادة**\n\nاشترِ رتبتك بالعملات:\n\n1. رتبة **قناص 🎯** (500 عملة)\n2. رتبة **وزير 📜** (2000 عملة)\n3. رتبة **إمبراطور 👑** (5000 عملة)`,
-        Markup.inlineKeyboard([
-            [Markup.button.callback('🎯 شراء قناص', 'buy_sniper')],
-            [Markup.button.callback('👑 شراء إمبراطور', 'buy_emp')]
-        ])
-    );
-});
-
-// --- ❓ إصلاح زر المساعدة وقناة السيادة ---
-bot.hears('❓ مساعدة', (ctx) => {
-    ctx.replyWithMarkdown(`❓ **دليل السيادة لويزي:**\n\n- أرسل اسم الأنمي فقط للبحث.\n- اجمع العملات لترقية رتبتك.\n- البوت يرسل تذكيرات تلقائية يومياً 7م.\n\nتواصل مع المطور: @Wizzy_Dev`);
-});
-
-bot.hears('🔱 قناة السيادة', (ctx) => {
-    ctx.replyWithMarkdown(`🔱 **قناة السيادة والمصدر:**\n\nتابع أحدث مشاريع ويزي البرمجية عبر الرابط:`,
-        Markup.inlineKeyboard([[Markup.button.url('انضم للسيادة 👑', 'https://t.me/wizzy_dv_sd')]])
-    );
+bot.action('stats', (ctx) => {
+    const count = Object.keys(getData()).length;
+    ctx.reply(`👥 عدد المستخدمين: ${count}`);
 });
 
 bot.launch();
-console.log("✅ الإمبراطورية العظمى لويزي تعمل بكفاءة 100%!");
+console.log("✅ القلعة تعمل الآن بكامل طاقتها وبدون أخطاء!");
