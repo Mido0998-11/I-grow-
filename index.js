@@ -1,16 +1,22 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
-const mongoose = require('mongoose');
+const fs = require('fs');
 const cron = require('node-cron');
 const express = require('express');
 
 const bot = new Telegraf('8138541463:AAFL1LiWzzMZo8SCNubLSvCRrKqTqcEpcJo');
-const ADMIN_ID = 123456789; // 👈 حط الآيدي بتاعك هنا عشان تقدر تعمل إذاعة
+const USERS_FILE = './users.json';
 
-// --- 🗄️ قاعدة البيانات (لحفظ اليوزرات) ---
-// ملاحظة: يفضل تستخدم MongoDB Atlas مجاني وتحط الرابط هنا
-mongoose.connect('mongodb+srv://user:pass@cluster.mongodb.net/wizzyBot'); 
-const User = mongoose.model('User', { telegramId: Number, name: String });
+// --- 🛠️ نظام حفظ المستخدمين (بدون قاعدة بيانات معقدة) ---
+if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, JSON.stringify([]));
+
+function saveUser(id, name) {
+    let users = JSON.parse(fs.readFileSync(USERS_FILE));
+    if (!users.find(u => u.id === id)) {
+        users.push({ id, name });
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users));
+    }
+}
 
 // --- 🌐 سيرفر ويب (عشان ريندر يفضل صاحي) ---
 const app = express();
@@ -18,19 +24,22 @@ app.get('/', (req, res) => res.send('🔱 Wizzy Sovereign Bot is Live!'));
 app.listen(process.env.PORT || 3000);
 
 // --- 🏠 أمر البداية ---
-bot.start(async (ctx) => {
-    await User.findOneAndUpdate({ telegramId: ctx.from.id }, { name: ctx.from.first_name }, { upsert: true });
+bot.start((ctx) => {
+    saveUser(ctx.from.id, ctx.from.first_name);
+    console.log(`👤 مستخدم جديد انضم: ${ctx.from.id}`);
+    
     ctx.replyWithMarkdown(`أهلاً بك في **إمبراطورية الأنمي الأسطورية** 👑🏮\n\nأنا بوت Wizzy المطور. أرسل اسم أنمي أو مانجا للبحث.`, 
     Markup.inlineKeyboard([
-        [Markup.button.url('قناة المطور', 'https://t.me/wizzy_123_bot')],
+        [Markup.button.url('قناة المطور 👑', 'https://t.me/wizzy_123_bot')],
         [Markup.button.callback('أحدث أخبار الأنمي 📰', 'get_news')]
     ]));
 });
 
 // --- 🔍 البحث عن الأنمي بأزرار احترافية ---
 bot.on('text', async (ctx) => {
-    if (ctx.message.text.startsWith('/')) return; // تجاهل الأوامر
     const query = ctx.message.text;
+    if (query.startsWith('/')) return;
+    
     const load = await ctx.reply('جاري استخراج البيانات من الأرشيف... ⏳');
 
     try {
@@ -38,7 +47,7 @@ bot.on('text', async (ctx) => {
         const anime = res.data.data[0];
 
         if (anime) {
-            const caption = `🏮 *${anime.title}*\n\n⭐ *التقييم:* ${anime.score}\n🎞️ *الحلقات:* ${anime.episodes}\n📝 *القصة:* ${anime.synopsis?.substring(0, 300)}...`;
+            const caption = `🏮 *${anime.title}*\n\n⭐ *التقييم:* ${anime.score || 'غير متوفر'}\n🎞️ *الحلقات:* ${anime.episodes || 'مستمر'}\n📝 *القصة:* ${anime.synopsis?.substring(0, 300)}...`;
             
             await ctx.sendPhoto(anime.images.jpg.large_image_url, {
                 caption: caption,
@@ -50,36 +59,49 @@ bot.on('text', async (ctx) => {
                 ])
             });
         } else {
-            ctx.reply('لم أجد هذا العمل يا ملك! 😅');
+            ctx.reply('لم أجد هذا العمل في الأرشيف الإمبراطوري! 😅');
         }
-    } catch (e) { ctx.reply('خطأ في الاتصال بالسيرفر.'); }
-    finally { ctx.deleteMessage(load.message_id).catch(() => {}); }
+    } catch (e) { 
+        ctx.reply('السيرفر مشغول، حاول لاحقاً.');
+    } finally { 
+        ctx.deleteMessage(load.message_id).catch(() => {}); 
+    }
 });
 
-// --- 📣 نظام الإذاعة (للأدمن فقط) ---
+// --- 📣 نظام الإذاعة (لك أنت فقط يا ملك) ---
 bot.command('broadcast', async (ctx) => {
-    if (ctx.from.id !== ADMIN_ID) return ctx.reply('هذا الأمر للسيادة فقط! 👑');
+    // ⚠️ ملاحظة: استبدل الرقم ده بالـ ID بتاعك اللي حتشوفه في الـ Logs لما تضغط Start
+    const MY_ID = 1048856268; // حط الـ ID بتاعك هنا
+    
+    if (ctx.from.id !== MY_ID) return ctx.reply('هذا الأمر للسيادة فقط! 👑');
+    
     const msg = ctx.message.text.replace('/broadcast ', '');
-    const users = await User.find();
-    let count = 0;
+    if (!msg || msg === '/broadcast') return ctx.reply('أدخل نص الرسالة بعد الأمر.');
+
+    const users = JSON.parse(fs.readFileSync(USERS_FILE));
+    let success = 0;
+
     users.forEach(user => {
-        bot.telegram.sendMessage(user.telegramId, `📢 **رسالة من الإمبراطور ويزي:**\n\n${msg}`, { parse_mode: 'Markdown' });
-        count++;
+        bot.telegram.sendMessage(user.id, `📢 **رسالة من الإمبراطور ويزي:**\n\n${msg}`, { parse_mode: 'Markdown' })
+            .then(() => success++)
+            .catch(() => {});
     });
-    ctx.reply(`تم إرسال الإذاعة لـ ${count} مستخدم.`);
+    
+    ctx.reply(`تم إرسال الإذاعة لـ ${users.length} مستخدم بنجاح!`);
 });
 
 // --- 📰 أخبار الأنمي اليومية (تلقائي) ---
-cron.schedule('0 9 * * *', async () => { // ترسل الساعة 9 صباحاً كل يوم
+cron.schedule('0 9 * * *', async () => {
     try {
         const res = await axios.get('https://api.jikan.moe/v4/seasons/now?limit=5');
         const news = res.data.data.map(a => `🔹 ${a.title}`).join('\n');
-        const users = await User.find();
+        const users = JSON.parse(fs.readFileSync(USERS_FILE));
+        
         users.forEach(user => {
-            bot.telegram.sendMessage(user.telegramId, `🆕 **أخبار الأنمي الصباحية:**\n\nأشهر الأنميات حالياً:\n${news}`, { parse_mode: 'Markdown' });
+            bot.telegram.sendMessage(user.id, `🆕 **أخبار الأنمي الصباحية:**\n\nأشهر الأنميات حالياً:\n${news}`, { parse_mode: 'Markdown' });
         });
     } catch (e) { console.log('خطأ في جلب الأخبار'); }
 });
 
 bot.launch();
-console.log("✅ البوت الأسطوري متصل!");
+console.log("✅ البوت الأسطوري متصل الآن وشغال 24 ساعة!");
