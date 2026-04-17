@@ -4,7 +4,6 @@ const fs = require('fs');
 const cron = require('node-cron');
 const express = require('express');
 
-// --- إعدادات الإمبراطورية ---
 const bot = new Telegraf('8138541463:AAFL1LiWzzMZo8SCNubLSvCRrKqTqcEpcJo');
 const ADMIN_ID = 5791865678; 
 const CHANNEL_ID = '@wizzy_dv_sd';
@@ -21,9 +20,9 @@ function saveUser(id, name) {
     }
 }
 
-// --- سيرفر الويب لضمان العمل 24/7 ---
+// --- سيرفر الويب للبقاء حياً ---
 const app = express();
-app.get('/', (req, res) => res.send('🔱 Wizzy Sovereign System is FULLY OPERATIONAL!'));
+app.get('/', (req, res) => res.send('🔱 Wizzy Sovereign System is ONLINE!'));
 app.listen(process.env.PORT || 3000);
 
 // --- فحص الاشتراك الإجباري ---
@@ -33,34 +32,35 @@ async function checkSub(ctx, next) {
         const allowed = ['member', 'administrator', 'creator'];
         if (allowed.includes(member.status)) return next();
         
-        await ctx.replyWithMarkdown(`⚠️ **عذراً يا ملك، يجب الانضمام للقناة أولاً!**`,
-            Markup.inlineKeyboard([[Markup.button.url('انضم للقناة الآن 👑', `https://t.me/${CHANNEL_ID.replace('@','')}`)]])
+        await ctx.replyWithMarkdown(`⚠️ **يا ملك، يجب الانضمام للقناة أولاً لاستخدام الترسانة!**`,
+            Markup.inlineKeyboard([[Markup.button.url('انضم للقناة من هنا 👑', `https://t.me/${CHANNEL_ID.replace('@','')}`)]])
         );
     } catch (e) { return next(); }
 }
 
-// --- 🏠 أمر البداية (Start) ---
+// --- أمر البداية ---
 bot.start(checkSub, async (ctx) => {
     saveUser(ctx.from.id, ctx.from.first_name);
-    try { await ctx.react('👑'); } catch (e) {} // تفاعل ملكي
+    try { await ctx.react('👑'); } catch (e) {} 
 
-    ctx.replyWithMarkdown(`أهلاً بك في **إمبراطورية الأنمي الأسطورية** 👑🏮\n\nأنا خادمك المطور **Wizzy**. أرسل اسم أي أنمي (بالإنجليزية) وسأرتبه لك فوراً!`,
+    ctx.replyWithMarkdown(`أهلاً بك في **إمبراطورية الأنمي والمانجا الأسطورية** 👑🏮\n\nأنا **خادمك Wizzy**، أرسل اسم العمل (بالإنجليزي) وسأرتبه لك فوراً.`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('📰 أحدث الأخبار اليومية', 'get_news')],
+            [Markup.button.callback('📰 أخبار الأنمي الآن', 'get_news')],
             [Markup.button.url('🔱 قناة السيادة', 'https://t.me/wizzy_dv_sd')]
         ])
     );
 });
 
-// --- 🔍 محرك البحث (Text Search) ---
+// --- محرك البحث الشامل ---
 bot.on('text', checkSub, async (ctx) => {
     const query = ctx.message.text;
-    if (query.startsWith('/')) return; // تجاهل الأوامر
+    if (query.startsWith('/')) return;
 
     try { await ctx.react('🔍'); } catch (e) {}
     const load = await ctx.reply('🔍 جاري استخراج البيانات من الأرشيف الملكي...');
 
     try {
+        // البحث عن أنمي أو مانجا
         const res = await axios.get(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`);
         const anime = res.data.data[0];
 
@@ -72,18 +72,18 @@ bot.on('text', checkSub, async (ctx) => {
                 caption: caption,
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
-                    [Markup.button.callback('🎬 قائمة الحلقات المنظمة', `eps_${anime.mal_id}_1`)],
-                    [Markup.button.url('📖 فصول المانجا', `https://gmanga.me/mangas?search=${encodeURIComponent(anime.title)}`)]
+                    [Markup.button.callback('🎬 قائمة الحلقات', `eps_${anime.mal_id}_1`)],
+                    [Markup.button.callback('📖 قائمة الفصول (مانجا)', `manga_${anime.title.split(' ')[0]}`)]
                 ])
             });
         } else {
-            ctx.reply('لم أجد هذا العمل يا إمبراطور! تأكد من الاسم بالإنجليزية.');
+            ctx.reply('لم أجد هذا العمل! تأكد من الاسم بالإنجليزي.');
         }
     } catch (e) { ctx.reply('السيرفر مشغول، حاول لاحقاً.'); }
     finally { ctx.deleteMessage(load.message_id).catch(() => {}); }
 });
 
-// --- 🎞️ زر قائمة الحلقات (Pagination) ---
+// --- 🎞️ إصلاح نظام الحلقات (عرض ذكي) ---
 bot.action(/eps_(\d+)_(\d+)/, async (ctx) => {
     const animeId = ctx.match[1];
     const page = parseInt(ctx.match[2]);
@@ -92,24 +92,52 @@ bot.action(/eps_(\d+)_(\d+)/, async (ctx) => {
         const res = await axios.get(`https://api.jikan.moe/v4/anime/${animeId}/episodes?page=${page}`);
         const episodes = res.data.data;
         
-        if (!episodes || episodes.length === 0) return ctx.answerCbQuery('وصلت لنهاية الحلقات!');
+        // إصلاح مشكلة "نهاية الحلقات": التحقق من وجود بيانات فعلياً
+        if (!episodes || episodes.length === 0) {
+            return ctx.answerCbQuery('عذراً، لا تتوفر بيانات حلقات لهذا العمل حالياً أو وصلت للنهاية.', { show_alert: true });
+        }
 
         let buttons = episodes.map(ep => [
-            Markup.button.callback(`حلقة ${ep.mal_id}: ${ep.title.substring(0,20)}..`, `watch_${animeId}_${ep.mal_id}`)
+            Markup.button.callback(`حلقة ${ep.mal_id}: ${ep.title.substring(0,22)}..`, `watch_${animeId}_${ep.mal_id}`)
         ]);
         
-        // أزرار التنقل بين صفحات القائمة
         let nav = [];
         if (page > 1) nav.push(Markup.button.callback('⬅️ السابق', `eps_${animeId}_${page - 1}`));
-        nav.push(Markup.button.callback('➡️ التالي', `eps_${animeId}_${page + 1}`));
-        buttons.push(nav);
+        if (res.data.pagination.has_next_page) nav.push(Markup.button.callback('➡️ التالي', `eps_${animeId}_${page + 1}`));
+        if (nav.length > 0) buttons.push(nav);
 
         await ctx.editMessageText(`🎞️ **قائمة الحلقات - صفحة ${page}:**`, Markup.inlineKeyboard(buttons));
         await ctx.answerCbQuery();
-    } catch (e) { ctx.answerCbQuery('خطأ في جلب البيانات.'); }
+    } catch (e) { ctx.answerCbQuery('خطأ في جلب بيانات الحلقات.'); }
 });
 
-// --- 🎬 زر المشاهدة والتنقل (Watch & Nav) ---
+// --- 📖 نظام المانجا الداخلية (فصول في تليجرام) ---
+bot.action(/manga_(.+)/, async (ctx) => {
+    const title = ctx.match[1];
+    try {
+        await ctx.react('📖');
+        const res = await axios.get(`https://api.jikan.moe/v4/manga?q=${encodeURIComponent(title)}&limit=1`);
+        const manga = res.data.data[0];
+
+        if (manga) {
+            const info = `📖 **مانجا: ${manga.title}**\n\n⭐ *التقييم:* ${manga.score}\n📚 *الفصول:* ${manga.chapters || 'مستمرة'}\n🧐 *الحالة:* ${manga.status}\n\n📝 *الوصف:* ${manga.synopsis?.substring(0, 300)}...`;
+            
+            await ctx.replyWithPhoto(manga.images.jpg.large_image_url, {
+                caption: info,
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.url('🚀 قراءة الفصول الآن', `https://gmanga.me/mangas?search=${encodeURIComponent(manga.title)}`) ],
+                    [Markup.button.callback('⬅️ العودة للبحث', 'start')]
+                ])
+            });
+            await ctx.answerCbQuery('تم استخراج بيانات المانجا');
+        } else {
+            ctx.answerCbQuery('لم أجد بيانات المانجا.');
+        }
+    } catch (e) { ctx.answerCbQuery('خطأ في جلب بيانات المانجا.'); }
+});
+
+// --- تفاعل المشاهدة المنظم ---
 bot.action(/watch_(\d+)_(\d+)/, async (ctx) => {
     const animeId = ctx.match[1];
     const epNum = parseInt(ctx.match[2]);
@@ -133,38 +161,25 @@ bot.action(/watch_(\d+)_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery(`الحلقة ${epNum}`);
 });
 
-// --- 📰 زر الأخبار (Manual News) ---
-bot.action('get_news', async (ctx) => {
-    try { await ctx.react('📰'); } catch (e) {}
-    try {
-        const res = await axios.get('https://api.jikan.moe/v4/seasons/now?limit=5');
-        const news = res.data.data.map(a => `🔥 *${a.title}* (⭐ ${a.score || '7.0'})`).join('\n\n');
-        ctx.replyWithMarkdown(`📰 **أحدث الأنميات المتصدرة حالياً:**\n\n${news}`);
-        await ctx.answerCbQuery();
-    } catch (e) { ctx.answerCbQuery('فشل جلب الأخبار.'); }
-});
-
-// --- 🤖 الإذاعة التلقائية للأخبار (9 صباحاً) ---
+// --- نظام الإذاعة التلقائية واليدوية ---
 cron.schedule('0 9 * * *', async () => {
     try {
         const res = await axios.get('https://api.jikan.moe/v4/seasons/now?limit=5');
         const news = res.data.data.map(a => `🔥 *${a.title}* (⭐ ${a.score || '7.0'})`).join('\n\n');
         const users = getUsers();
         users.forEach(u => {
-            bot.telegram.sendMessage(u.id, `🆕 **أخبار الصباح من Wizzy:**\n\nأهم الأنميات المتصدرة اليوم:\n\n${news}`, { parse_mode: 'Markdown' });
+            bot.telegram.sendMessage(u.id, `🆕 **أخبار الصباح من Wizzy:**\n\nأهم أعمال الموسم اليوم:\n\n${news}`, { parse_mode: 'Markdown' });
         });
     } catch (e) { console.log('Cron Error'); }
 });
 
-// --- 📣 الإذاعة اليدوية للإمبراطور ---
 bot.command('broadcast', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     const msg = ctx.message.text.replace('/broadcast ', '');
-    if (!msg || msg === '/broadcast') return ctx.reply('أدخل نص الرسالة.');
     const users = getUsers();
     users.forEach(u => bot.telegram.sendMessage(u.id, `📢 **رسالة ملكية:**\n\n${msg}`).catch(()=>null));
-    ctx.reply(`تم إرسال الإذاعة لـ ${users.length} مستخدم.`);
+    ctx.reply(`تم الإرسال لـ ${users.length} مستخدم بنجاح.`);
 });
 
 bot.launch();
-console.log("✅ البوت الأسطوري متصل الآن وجميع الأزرار تحت الاختبار!");
+console.log("✅ البوت الأسطوري متصل الآن بكامل قواه المتفاعلة!");
