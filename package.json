@@ -1,12 +1,12 @@
 {
-  "name": "wizzy-sovereign-final",
-  "version": "2.5.0",
+  "name": "wizzy-consumet-masterpiece",
+  "version": "3.0.0",
+  "description": "Anime Sniper Bot by Wizzy",
   "main": "index.js",
   "scripts": { "start": "node index.js" },
   "dependencies": {
     "telegraf": "^4.12.2",
     "axios": "^1.4.0",
-    "express": "^4.18.2",
-    "node-cron": "^3.0.0"
+    "express": "^4.18.2"
   }
 }
