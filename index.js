@@ -1,119 +1,73 @@
 const { Telegraf, Markup } = require('telegraf');
-const fs = require('fs');
+const axios = require('axios');
 const express = require('express');
 
-// --- إعدادات الإمبراطورية ---
+// --- إعدادات السيادة ---
 const bot = new Telegraf('8138541463:AAFL1LiWzzMZo8SCNubLSvCRrKqTqcEpcJo');
-const ADMIN_ID = 5791865678; 
-const CHANNEL_ID = '@wizzy_dv_sd';
-const DB_FILE = './database.json';
-
-// --- إدارة قاعدة البيانات (تخزين الحلقات) ---
-if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({}));
-const getDB = () => JSON.parse(fs.readFileSync(DB_FILE));
-const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+const ADMIN_ID = 5791865678;
+const GITHUB_URL = 'https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json';
 
 // سيرفر ويب للبقاء حياً في Render
 const app = express();
-app.get('/', (req, res) => res.send('🔱 Wizzy Sovereign Storage is LIVE!'));
+app.get('/', (req, res) => res.send('🔱 Wizzy GitHub Engine is LIVE!'));
 app.listen(process.env.PORT || 3000);
 
-// --- فحص الاشتراك الإجباري ---
-async function checkSub(ctx, next) {
-    if (ctx.from.id === ADMIN_ID) return next();
+// دالة لتنظيف الأسماء للبحث في المواقع العربية
+const cleanName = (t) => encodeURIComponent(t.replace(/[^a-zA-Z0-9 ]/g, ""));
+
+// --- 🏠 البداية ---
+bot.start((ctx) => {
+    ctx.replyWithMarkdown(`👑 **أهلاً بك في إمبراطورية ويزي للأنمي**\n\nأنا الآن متصل بأرشيف GitHub العالمي. أرسل اسم الأنمي بالإنجليزي (مثل: *Blue Lock*) وسأقوم بجلبه فوراً!`,
+    Markup.keyboard([['🔍 ابحث عن أنمي'], ['🔱 قناة السيادة']]).resize());
+});
+
+bot.hears('🔍 ابحث عن أنمي', (ctx) => ctx.reply('أرسل اسم الأنمي الآن يا ملك.. 🔍'));
+
+// --- 🔍 محرك البحث (يقرأ من جيت هوب ويحول لمشاهدة عربية) ---
+bot.on('text', async (ctx) => {
+    const query = ctx.message.text.toLowerCase();
+    if (['🔍 ابحث عن أنمي', '🔱 قناة السيادة'].includes(ctx.message.text)) return;
+
+    const load = await ctx.reply('⏳ جاري التنقيب في أرشيف جيت هوب (الملف ضخم، انتظر ثانية)...');
+
     try {
-        const member = await ctx.telegram.getChatMember(CHANNEL_ID, ctx.from.id);
-        if (['member', 'administrator', 'creator'].includes(member.status)) return next();
-        
-        await ctx.replyWithMarkdown(`⚠️ **يا ملك، يجب الانضمام للقناة أولاً لاستخدام البوت!**`,
-            Markup.inlineKeyboard([[Markup.button.url('انضم للقناة الآن 👑', `https://t.me/${CHANNEL_ID.replace('@','')}`)]])
-        );
-    } catch (e) { return next(); }
-}
+        // سحب البيانات من الرابط اللي إنت جبته
+        const res = await axios.get(GITHUB_URL, { timeout: 15000 });
+        const animeData = res.data;
 
-// --- 🏠 القائمة الرئيسية (نظام التحفة) ---
-const mainMenu = Markup.keyboard([
-    ['🔍 بحث عن أنمي', '📂 مكتبة الأنمي'],
-    ['🔱 قناة السيادة', '🛠️ لوحة التحكم']
-]).resize();
+        // البحث عن أول نتيجة تطابق الاسم
+        const anime = animeData.find(a => a.title.toLowerCase().includes(query));
 
-bot.start(checkSub, async (ctx) => {
-    try { await ctx.react('👑'); } catch (e) {}
-    ctx.replyWithMarkdown(`أهلاً بك في **إمبراطورية ويزي للأنمي** 👑🏯\n\nأرسل اسم الأنمي للبحث عنه، أو استخدم القائمة أدناه.`, mainMenu);
-});
+        if (anime) {
+            const q = cleanName(anime.title);
+            
+            // صناعة "روابط المشاهدة العربية" فوراً
+            const buttons = [
+                [Markup.button.url('🎬 مشاهدة (سيرفر 1)', `https://witanime.pics/?s=${q}`)],
+                [Markup.button.url('📺 مشاهدة (سيرفر 2)', `https://animelek.me/search?q=${q}`)],
+                [Markup.button.url('🚀 بحث شامل في تليجرام', `tg://search?text=${q}+مترجم`)]
+            ];
 
-// --- 🛠️ ميزة الأدمن: تخزين الحلقات (فقط قم بتحويل الفيديو للبوت) ---
-bot.on('video', async (ctx) => {
-    if (ctx.from.id !== ADMIN_ID) return;
+            // لو في روابط عالمية تانية في الملف بنضيفها
+            if (anime.mal_id) buttons.push([Markup.button.url('ℹ️ معلومات MyAnimeList', `https://myanimelist.net/anime/${anime.mal_id}`)]);
 
-    const fileId = ctx.message.video.file_id;
-    const caption = ctx.message.caption || 'حلقة جديدة';
-    
-    ctx.replyWithMarkdown(`✅ **وصل الهدف يا إمبراطور!**\n\nالاسم: \`${caption}\`\n\nتحت أي أنمي تريد تخزينها؟ (أرسل الاسم بالإنجليزية الآن)`);
-    bot.context.tempVideo = { fileId, caption };
-});
-
-// --- 🔍 محرك البحث الذكي (محلي + عالمي) ---
-bot.on('text', checkSub, async (ctx) => {
-    const text = ctx.message.text;
-
-    // 1. لو الأدمن بيخزن حلقة
-    if (ctx.from.id === ADMIN_ID && bot.context.tempVideo) {
-        let db = getDB();
-        const animeName = text.toLowerCase();
-        if (!db[animeName]) db[animeName] = [];
-        
-        db[animeName].push({ id: bot.context.tempVideo.fileId, info: bot.context.tempVideo.caption });
-        saveDB(db);
-        bot.context.tempVideo = null;
-        return ctx.reply(`✅ تم إضافة الحلقة لمكتبة **${text}** بنجاح!`);
-    }
-
-    if (['🔍 بحث عن أنمي', '📂 مكتبة الأنمي', '🔱 قناة السيادة', '🛠️ لوحة التحكم'].includes(text)) {
-        if (text === '🔍 بحث عن أنمي') return ctx.reply('أرسل اسم الأنمي الذي تبحث عنه الآن.. 🔍');
-        if (text === '📂 مكتبة الأنمي') {
-            const keys = Object.keys(getDB());
-            return ctx.reply(keys.length > 0 ? `📂 القائمة المتوفرة:\n\n${keys.join('\n')}` : 'المكتبة فارغة حالياً.');
+            await ctx.replyWithMarkdown(
+                `✅ **تم العثور على الأنمي في أرشيف جيت هوب!**\n\n` +
+                `🏯 **الاسم:** \`${anime.title}\`\n` +
+                `🎞️ **الحلقات:** \`${anime.episodes || 'مستمر'}\`\n` +
+                `🎭 **النوع:** \`${anime.type || 'TV'}\`\n\n` +
+                `🔥 اختر سيرفر المشاهدة المباشرة الآن:`,
+                Markup.inlineKeyboard(buttons)
+            );
+        } else {
+            ctx.reply('❌ لم أجد هذا الأنمي في المستودع حالياً! تأكد من الاسم بالإنجليزي.');
         }
-        if (text === '🛠️ لوحة التحكم' && ctx.from.id === ADMIN_ID) {
-            return ctx.reply(`📊 **إحصائيات الإمبراطورية:**\n\nعدد الأنميات المخزنة: \`${Object.keys(getDB()).length}\``);
-        }
-        return;
+    } catch (e) {
+        ctx.reply('⚠️ السيرفر العالمي مضغوط حالياً (حجم الملف 10MB)، جرب تضغط "بحث" مرة تانية هسي!');
+    } finally {
+        ctx.deleteMessage(load.message_id).catch(() => {});
     }
-
-    // 2. البحث الفعلي
-    const db = getDB();
-    const query = text.toLowerCase();
-
-    if (db[query]) {
-        // لو موجود في مخزننا
-        let buttons = db[query].map((ep, index) => [
-            Markup.button.callback(`🎞️ ${ep.info}`, `show_${query}_${index}`)
-        ]);
-        ctx.reply(`🎬 **نتائج الأرشيف لـ ${text}:**`, Markup.inlineKeyboard(buttons));
-    } else {
-        // لو مش موجود، نفتح "البحث العالمي" في تليجرام (Zero Effort)
-        const tgSearch = `tg://search?text=${encodeURIComponent(text + " مترجم")}`;
-        const buttons = Markup.inlineKeyboard([
-            [Markup.button.url('🚀 ابحث في كل قنوات تليجرام', tgSearch)],
-            [Markup.button.url('📂 ابحث في مكتبة الأنمي العربية', `https://t.me/s/Anime_Library?q=${encodeURIComponent(text)}`)]
-        ]);
-        ctx.replyWithMarkdown(`❌ **لم أجد "${text}" في مخزني الخاص بعد..**\n\nلكن لا تقلق، اضغط أدناه وسيفتح لك تليجرام كل القنوات التي توفره فوراً:`, buttons);
-    }
-});
-
-// --- 🎞️ عرض الفيديو من المخزن ---
-bot.action(/show_(.+)_(.+)/, async (ctx) => {
-    const [_, name, index] = ctx.match;
-    const db = getDB();
-    const episode = db[name][index];
-    
-    await ctx.replyWithVideo(episode.id, {
-        caption: `🎬 **${episode.info}**\n\n🔥 مشاهدة ممتعة من مكتبة ويزي! @wizzy_dv_sd`,
-        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ العودة للنتائج', 'start')]])
-    });
-    await ctx.answerCbQuery();
 });
 
 bot.launch();
-console.log("✅ القلعة متصلة بنظام التخزين والبحث العالمي!");
+console.log("✅ القلعة متصلة بـ GitHub بنجاح!");
