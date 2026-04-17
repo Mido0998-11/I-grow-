@@ -7,157 +7,127 @@ const express = require('express');
 // --- بيانات السيادة ---
 const bot = new Telegraf('8138541463:AAFL1LiWzzMZo8SCNubLSvCRrKqTqcEpcJo');
 const ADMIN_ID = 5791865678;
-const CHANNEL_ID = '@wizzy_dv_sd';
-const DB_FILE = './imperial_data.json';
+const CHANNEL_USERNAME = 'wizzy_dv_sd'; // يوزر القناة بدون @
+const DB_FILE = './imperial_growth_db.json';
 
-// --- إدارة البيانات ---
+// --- إدارة قاعدة البيانات ---
 if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({}));
 const getData = () => JSON.parse(fs.readFileSync(DB_FILE));
 const saveData = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-function initUser(ctx) {
+// دالة فحص الاشتراك الإجباري (التحقق من القناة)
+async function isSubscribed(ctx) {
+    if (ctx.from.id === ADMIN_ID) return true;
+    try {
+        const member = await ctx.telegram.getChatMember(`@${CHANNEL_USERNAME}`, ctx.from.id);
+        return ['member', 'administrator', 'creator'].includes(member.status);
+    } catch (e) { return false; }
+}
+
+// سيرفر ويب للبقاء حياً
+const app = express();
+app.get('/', (req, res) => res.send('🔱 Wizzy Growth System is LIVE!'));
+app.listen(process.env.PORT || 3000);
+
+// --- 🛠️ الأزرار الرئيسية ---
+const btnSearch = '🔍 قنص أنمي';
+const btnInvite = '🔗 رابط الدعوة';
+const btnProfile = '👤 ملفي الملكي';
+const btnHelp = '❓ مساعدة';
+const btnTop = '🔥 توب الأسبوع';
+const btnChannel = '🔱 قناة السيادة';
+
+const mainMenu = Markup.keyboard([
+    [btnSearch, btnInvite],
+    [btnProfile, btnTop],
+    [btnHelp, btnChannel]
+]).resize();
+
+// --- 🏠 معالج البداية (نظام الدعوات) ---
+bot.start(async (ctx) => {
+    const userId = ctx.from.id;
+    const inviterId = ctx.startPayload; // جلب ID الشخص اللي صنع الرابط
     let db = getData();
-    const id = ctx.from.id;
-    if (!db[id]) {
-        db[id] = { 
+    let isNew = !db[userId];
+
+    // لو اليوزر جديد ودخل عن طريق رابط شخص تاني
+    if (isNew && inviterId && inviterId != userId && db[inviterId]) {
+        db[inviterId].coins += 100; // مكافأة للي أرسل الرابط
+        db[inviterId].invites = (db[inviterId].invites || 0) + 1;
+        ctx.telegram.sendMessage(inviterId, `🔔 **بشرى ملكية!**\n\nشخص جديد انضم للإمبراطورية عن طريق رابطك. حصلت على **100 عملة**! 🪙`).catch(() => {});
+    }
+
+    if (isNew) {
+        db[userId] = { 
             name: ctx.from.first_name, 
-            coins: 100, 
+            coins: 50, 
             xp: 0, 
-            level: 1,
-            reminders: true, 
-            joined: new Date().toLocaleDateString() 
+            invites: 0,
+            rank: 'مواطن جديد ✨'
         };
         saveData(db);
     }
-    return db[id];
-}
 
-// سيرفر Render
-const app = express();
-app.get('/', (req, res) => res.send('🔱 Wizzy Imperial Core is Online!'));
-app.listen(process.env.PORT || 3000);
-
-// --- تعاريف الأزرار (ثابتة لمنع الأخطاء) ---
-const btnSearch = '🔍 قنص أنمي';
-const btnToday = '📅 أنميات اليوم';
-const btnTop = '🔥 الأنميات المتصدرة';
-const btnProfile = '👤 ملفي الملكي';
-const btnHelp = '❓ مساعدة';
-const btnChannel = '🔱 قناة السيادة';
-const btnAdmin = '🛠️ لوحة الإمبراطور';
-
-const mainMenu = Markup.keyboard([
-    [btnSearch, btnToday],
-    [btnTop, btnProfile],
-    [btnHelp, btnChannel],
-    [btnAdmin]
-]).resize();
-
-// --- ⏰ نظام التذكير التلقائي (الساعة 6 مساءً) ---
-cron.schedule('0 18 * * *', () => {
-    const db = getData();
-    Object.keys(db).forEach(id => {
-        if (db[id].reminders) {
-            bot.telegram.sendMessage(id, `👑 **تذكير ملكي:**\n\nيا ملك، حان وقت متابعة أنمياتك المفضلة! لا تنسَ صلاتك ودراستك. 🔥`).catch(() => {});
-        }
-    });
-});
-
-// --- 🏠 الأوامر الأساسية ---
-bot.start(async (ctx) => {
-    initUser(ctx);
     try { await ctx.react('👑'); } catch (e) {}
-    ctx.replyWithMarkdown(`أهلاً بك في **الإصدار المعجز لويزي** 🏯✨\n\nجميع الأزرار والأنظمة مفعلة الآن بنسبة 100%. جرب الميزات الجديدة!`, mainMenu);
+    
+    // التحقق من القناة قبل الترحيب
+    const sub = await isSubscribed(ctx);
+    if (!sub) {
+        return ctx.replyWithMarkdown(`⚠️ **عذراً يا ملك، القلعة مغلقة!**\n\nيجب أن تشترك في قناة السيادة أولاً لتستمتع بمميزات القنص.\n\nبعد الاشتراك، اضغط /start مرة أخرى.`,
+            Markup.inlineKeyboard([[Markup.button.url('انضم للقناة الآن 👑', `https://t.me/${CHANNEL_USERNAME}`)]])
+        );
+    }
+
+    ctx.replyWithMarkdown(`أهلاً بك في **إمبراطورية ويزي المتطورة** 🏯✨\n\nالنظام الآن يدعم دعوة الأصدقاء؛ شارك رابطك واجمع آلاف العملات!`, mainMenu);
 });
 
-// --- ❓ إصلاح زر المساعدة ---
-bot.hears(btnHelp, async (ctx) => {
-    try { await ctx.react('💡'); } catch (e) {}
-    ctx.replyWithMarkdown(`❓ **دليل السيادة لويزي:**\n\n1. أرسل اسم الأنمي (بالإنجليزية) للبحث الفوري.\n2. اجمع الـ XP والعملات لرفع مستواك الإمبراطوري.\n3. التذكيرات تصلك يومياً الساعة 6 مساءً تلقائياً.\n\n📞 للدعم الفني: @Wizzy_Dev`, 
-    Markup.inlineKeyboard([[Markup.button.url('تواصل مع المطور 👨‍💻', 'https://t.me/Wizzy_Dev')]]));
+// --- 🔗 ميزة صنع رابط الدعوة الشخصي ---
+bot.hears(btnInvite, async (ctx) => {
+    const sub = await isSubscribed(ctx);
+    if (!sub) return ctx.reply('اشترك في القناة أولاً يا ملك! 🚫');
+    
+    const inviteLink = `https://t.me/${ctx.botInfo.username}?start=${ctx.from.id}`;
+    ctx.replyWithMarkdown(`🔗 **رابط الدعوة الخاص بك:**\n\n\`${inviteLink}\`\n\nشارك هذا الرابط مع أصدقائك. عن كل شخص يدخل الإمبراطورية ستحصل على **100 عملة** فوراً! 🪙🔥`);
 });
 
-// --- 🔱 إصلاح زر قناة السيادة ---
-bot.hears(btnChannel, async (ctx) => {
-    try { await ctx.react('📡'); } catch (e) {}
-    ctx.replyWithMarkdown(`🔱 **قناة السيادة والمصدر:**\n\nانضم لمتابعة تحديثات الإمبراطور ويزي وأحدث مشاريع البرمجة.`,
-    Markup.inlineKeyboard([[Markup.button.url('دخول القناة الملكية 👑', 'https://t.me/wizzy_dv_sd')]]));
-});
-
-// --- 👤 ملفي الملكي ---
+// --- 👤 الملف الملكي (عرض النقاط والدعوات) ---
 bot.hears(btnProfile, async (ctx) => {
-    const u = initUser(ctx);
-    try { await ctx.react('📊'); } catch (e) {}
-    ctx.replyWithMarkdown(`👤 **البطاقة الشخصية لـ ${ctx.from.first_name}:**\n\n🆙 المستوى: \`${u.level}\`\n✨ الخبرة: \`${u.xp}\`\n🪙 العملات: \`${u.coins}\`\n📅 انضممت في: \`${u.joined}\`\n🔔 التذكير: \`${u.reminders ? 'مفعل ✅' : 'معطل ❌'}\``);
+    const db = getData();
+    const u = db[ctx.from.id] || { coins: 0, invites: 0, rank: 'غير مسجل' };
+    ctx.replyWithMarkdown(`👤 **ملف السيادة لـ ${ctx.from.first_name}:**\n\n📜 الرتبة: \`${u.rank}\`\n🪙 العملات: \`${u.coins}\`\n👥 عدد الناجحين في دعوتهم: \`${u.invites}\`\n\nاستخدم رابط الدعوة لزيادة ثروتك!`);
 });
 
-// --- 📅 أنميات اليوم ---
-bot.hears(btnToday, async (ctx) => {
-    try { await ctx.react('⏰'); } catch (e) {}
-    const load = await ctx.reply('⏳ جاري جلب جدول اليوم...');
-    try {
-        const res = await axios.get(`https://api.jikan.moe/v4/schedules?limit=8`);
-        let text = `📅 **أنميات تعرض اليوم:**\n\n`;
-        res.data.data.forEach(a => text += `🔹 *${a.title}* (🕒 ${a.broadcast.time || 'N/A'})\n`);
-        ctx.replyWithMarkdown(text);
-    } catch (e) { ctx.reply('السيرفر مشغول.'); }
-    finally { ctx.deleteMessage(load.message_id).catch(() => {}); }
-});
-
-// --- 🔥 الأنميات المتصدرة ---
-bot.hears(btnTop, async (ctx) => {
-    try { await ctx.react('🔥'); } catch (e) {}
-    const res = await axios.get('https://api.jikan.moe/v4/top/anime?limit=5');
-    let text = `🏆 **أفضل 5 أنميات هذا الأسبوع:**\n\n`;
-    res.data.data.forEach((a, i) => text += `${i+1}. *${a.title}* (⭐ ${a.score})\n`);
-    ctx.replyWithMarkdown(text);
-});
-
-// --- 🔍 محرك البحث (القناص) ---
-bot.hears(btnSearch, (ctx) => ctx.reply('أرسل اسم الأنمي بالإنجليزية الآن.. 🔍'));
-
+// --- 🔍 محرك القنص (مؤمن بالاشتراك) ---
 bot.on('text', async (ctx) => {
     const query = ctx.message.text;
-    const allBtns = [btnSearch, btnToday, btnTop, btnProfile, btnHelp, btnChannel, btnAdmin];
+    const allBtns = [btnSearch, btnInvite, btnProfile, btnHelp, btnTop, btnChannel];
     if (allBtns.includes(query)) return;
 
-    let db = getData();
-    const id = ctx.from.id;
-    if (db[id]) { db[id].xp += 20; db[id].coins += 10; saveData(db); }
+    const sub = await isSubscribed(ctx);
+    if (!sub) return ctx.reply('⚠️ لا يمكنك القنص بدون الاشتراك في القناة!');
 
     try { await ctx.react('🔍'); } catch (e) {}
-    const load = await ctx.reply('🚀 جاري استخراج المعلومات...');
+    const load = await ctx.reply('🚀 جاري قنص البيانات...');
 
     try {
         const res = await axios.get(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`);
         const a = res.data.data[0];
-
         if (a) {
-            try { await ctx.react('✅'); } catch (e) {}
-            const caption = `🏯 **الأنمي:** \`${a.title}\`\n\n⭐ التقييم: \`${a.score || '7.5'}\`\n🎞️ الحلقات: \`${a.episodes || 'مستمر'}\`\n📌 الحالة: \`${a.status}\`\n🎬 الاستوديو: \`${a.studios[0]?.name || 'N/A'}\`\n\n✅ اختر وجهتك للمشاهدة:`;
-            
             const q = encodeURIComponent(a.title);
+            const caption = `🏯 **الأنمي:** \`${a.title}\`\n⭐ التقييم: \`${a.score || '7.5'}\`\n\n✅ روابط المشاهدة:`;
             const buttons = Markup.inlineKeyboard([
-                [Markup.button.url('🎬 سيرفر WitAnime', `https://witanime.pics/?s=${q}`)],
-                [Markup.button.url('📽️ سيرفر AnimeLek', `https://animelek.me/search?q=${q}`)],
-                [Markup.button.url('🚀 بحث تليجرام المباشر', `tg://search?text=${q}+مترجم`)]
+                [Markup.button.url('🎬 WitAnime', `https://witanime.pics/?s=${q}`)],
+                [Markup.button.url('📽️ AnimeLek', `https://animelek.me/search?q=${q}`)]
             ]);
             await ctx.sendPhoto(a.images.jpg.large_image_url, { caption, ...buttons });
         } else { ctx.reply('لم أجد نتائج.'); }
-    } catch (e) { ctx.reply('حدث خطأ في البحث.'); }
+    } catch (e) { ctx.reply('خطأ في السيرفر.'); }
     finally { ctx.deleteMessage(load.message_id).catch(() => {}); }
 });
 
-// --- 🛠️ لوحة التحكم ---
-bot.hears(btnAdmin, (ctx) => {
-    if (ctx.from.id !== ADMIN_ID) return ctx.reply('❌ للسيادة فقط!');
-    ctx.replyWithMarkdown(`🔱 **غرفة القيادة:**`, Markup.inlineKeyboard([[Markup.button.callback('📊 الإحصائيات', 'stats')]]));
-});
-
-bot.action('stats', (ctx) => {
-    const count = Object.keys(getData()).length;
-    ctx.reply(`👥 عدد المستخدمين: ${count}`);
-});
+// --- ❓ زر المساعدة و 🔱 القناة (إصلاح نهائي) ---
+bot.hears(btnHelp, (ctx) => ctx.reply('❓ أرسل اسم أنمي أو شارك رابطك لجمع النقاط. الدعم: @Wizzy_Dev'));
+bot.hears(btnChannel, (ctx) => ctx.reply(`🔱 قناة السيادة: https://t.me/${CHANNEL_USERNAME}`));
 
 bot.launch();
-console.log("✅ القلعة تعمل الآن بكامل طاقتها وبدون أخطاء!");
+console.log("✅ إمبراطورية ويزي بنظام الريفرال والتحقق تعمل الآن!");
